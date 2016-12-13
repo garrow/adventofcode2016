@@ -20,16 +20,30 @@ class DirectionSimulator
     @inputs = inputs
   end
 
+
+  def raw_inputs
+    inputs.split(", ")
+  end
+
+
   def input_commands
     regex =  /(R|L)(\d+)/
 
-    inputs.split(", ").map { |input|
+    raw_inputs.map { |input|
       matches = input.match(regex)
+
+      next unless matches
       direction = matches[1]
       distance = matches[2]
 
       [direction, distance]
-    }.map { |pair|
+    }.compact
+  end
+
+
+
+  def parsed_commands
+    input_commands.map { |pair|
       direction = pair.first
       distance = pair.last
 
@@ -43,13 +57,21 @@ class DirectionSimulator
       distance = distance.to_i
 
       [direction_method, distance]
-
     }
   end
 
 
+  def process_commands
+    parsed_commands.map { |(direction, distance)|
+      actor.send(direction)
+      distance.times { actor.move  }
+
+      actor.mark
+    }
+  end
+
   def call
-    inputs.split(", ")
+    process_commands
   end
 
 end
@@ -63,6 +85,7 @@ class TaxiCab
     @x = 0
     @y = 0
     @facing = :north
+    @locations = []
   end
 
   def directionality
@@ -89,6 +112,14 @@ class TaxiCab
   def move
     @x, @y = directionality[facing].call(x, y)
   end
+
+  def mark
+    @locations << { x: x, y: y, distance: distance_from_origin }
+  end
+
+  def distance_from_origin
+    x.abs + y.abs
+  end
 end
 
 class InputsTest < MiniTest::Test
@@ -102,17 +133,69 @@ class DirectionSimulatorTest < MiniTest::Test
     assert_equal DirectionSimulator.new("go").actor, "go"
   end
 
-  def test_inits
-    assert_equal DirectionSimulator.new(nil, "1, 2, 3, 4").call, %w[1 2 3 4]
+  def test_raw_split_inputs
+    assert_equal DirectionSimulator.new(nil, "1, 2, 3, 4").raw_inputs, %w[1 2 3 4]
   end
 
 
   def test_inputs_split_to_commands
-
-    # simulator = DirectionSimulator.new(nil, "R5")
     simulator = DirectionSimulator.new(nil, "R5, L2, L1")
     assert_equal simulator.input_commands, [["R", "5"], ["L", "2"], ["L", "1"]]
   end
+
+  def test_inputs_commands_to_args
+    simulator = DirectionSimulator.new(nil, "R5, L2, L1")
+    assert_equal simulator.parsed_commands, [[:right, 5], [:left, 2], [:left, 1]]
+  end
+
+  def test_simulate_simple
+    cab = TaxiCab.new
+    simulator = DirectionSimulator.new(cab, "R5")
+    assert_equal simulator.parsed_commands, [[:right, 5]]
+
+    simulator.process_commands
+    assert_equal 5, simulator.actor.y
+
+  end
+
+
+  def assert_distance(distance:, commands:)
+    cab = TaxiCab.new
+    simulator = DirectionSimulator.new(cab, commands)
+    simulator.call
+
+    #puts commands
+    #puts  simulator.actor.inspect
+
+    assert_equal distance, simulator.actor.distance_from_origin
+  end
+
+
+
+  def test_simulate_testcase1
+    assert_distance(distance: 5, commands:  "R2, L3")
+  end
+
+  def test_simulate_testcase2
+    assert_distance(distance: 2, commands:  "R2, R2, R2")
+  end
+
+  def test_simulate_testcase3
+    assert_distance(distance: 12, commands:  "R5, L5, R5, R3")
+  end
+
+
+
+  def test_simulate_testcase4
+    assert_distance(distance: 20, commands:  "L10, L10")
+  end
+
+  def test_simulate_final_answer
+    assert_distance(distance: 287, commands:  input)
+  end
+
+
+
 
 end
 
